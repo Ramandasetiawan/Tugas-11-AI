@@ -1,0 +1,82 @@
+import cv2
+import os
+import time
+from datetime import datetime
+
+# Fungsi untuk memastikan folder "screenshots" tersedia
+def init_folders():
+    if not os.path.exists("screenshots"):
+        os.mkdir("screenshots")
+
+# Fungsi untuk mencatat kejadian kecurangan ke file dan menyimpan screenshot
+def log_cheating(message, frame, filename_prefix):
+    print(message)
+    # Simpan log ke file teks
+    with open("cheating_log.txt", "a") as f:
+        f.write(message + "\n")
+    # Simpan screenshot dengan timestamp
+    timestamp = datetime.now().strftime("%H%M%S")
+    filepath = f"screenshots/{filename_prefix}_{timestamp}.jpg"
+    cv2.imwrite(filepath, frame)
+
+# Fungsi utama menjalankan aplikasi deteksi wajah
+def main():
+    init_folders()  # Pastikan folder sudah ada
+
+    # Load model deteksi wajah dari OpenCV (Haar Cascade)
+    face_detector = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    # Aktifkan kamera (webcam)
+    cam = cv2.VideoCapture(0)
+
+    missing_start = None  # Menyimpan waktu mulai wajah menghilang
+
+    try:
+        while True:
+            ret, frame = cam.read()
+            if not ret:
+                break  # Jika kamera gagal dibaca, keluar dari loop
+
+            # Ubah gambar ke grayscale (diperlukan oleh Haar Cascade)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            # Deteksi wajah dalam frame
+            faces = face_detector.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5)
+            count = len(faces)  # Hitung jumlah wajah terdeteksi
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # Ambil waktu sekarang
+
+            # Deteksi lebih dari satu wajah
+            if count > 1:
+                log_cheating(f"[{now_str}] Terdeteksi lebih dari satu wajah!", frame, "multiple")
+
+            # Deteksi jika tidak ada wajah selama lebih dari 3 detik
+            if count == 0:
+                if missing_start is None:
+                    missing_start = time.time()  # Catat waktu mulai wajah menghilang
+                elif time.time() - missing_start > 3:
+                    log_cheating(f"[{now_str}] Wajah tidak terlihat selama lebih dari 3 detik!", frame, "missing")
+                    missing_start = None  # Reset setelah mencatat
+            else:
+                missing_start = None  # Reset jika wajah kembali terlihat
+
+            # Tampilkan kotak di sekitar wajah
+            for (x, y, w, h) in faces:
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+
+            # Tampilkan jumlah wajah di layar
+            cv2.putText(frame, f"Wajah Terdeteksi: {count}", (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
+
+            # Tampilkan jendela video
+            cv2.imshow("Deteksi Curang Ujian", frame)
+
+            # Tekan tombol 'q' untuk keluar dari program
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    finally:
+        # Tutup webcam dan jendela tampilan saat selesai
+        cam.release()
+        cv2.destroyAllWindows()
+
+# Jalankan program utama
+if __name__ == "__main__":
+    main()
